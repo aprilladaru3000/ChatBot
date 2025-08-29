@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Flask API",
+			"type": "shell",
+			"command": "C:/Users/LENOVO/Documents/Project/Python/ChatBot/.venv/Scripts/python.exe -m app.main",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}
