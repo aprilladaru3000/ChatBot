@@ -6,6 +6,9 @@ FAQS = {
     # Add more FAQs as needed
 }
 
+
 def get_faq_answer(question: str):
+    if not question:
+        return None
     q = question.strip().lower()
     return FAQS.get(q)
