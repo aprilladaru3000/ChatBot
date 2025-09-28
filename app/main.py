@@ -1,32 +1,77 @@
 from flask import Flask, request, jsonify
 from transformers import pipeline
 from .faq import get_faq_answer
+from .history import create_session, add_turn, get_history, clear_session
 
 app = Flask(__name__)
 
-# Load Hugging Face Transformers pipeline (e.g., distilbert-base-uncased-distilled-squad)
-qa_pipeline = pipeline('question-answering', model='distilbert-base-uncased-distilled-squad')
+# Initialize the QA pipeline lazily to avoid heavy initialization on import
+_qa_pipeline = None
+
+def get_qa_pipeline():
+    global _qa_pipeline
+    if _qa_pipeline is None:
+        _qa_pipeline = pipeline('question-answering', model='distilbert-base-uncased-distilled-squad')
+    return _qa_pipeline
+
+
+@app.route('/session', methods=['POST'])
+def new_session():
+    session_id = create_session()
+    return jsonify({'session_id': session_id})
+
+
+@app.route('/session/<session_id>/history', methods=['GET'])
+def session_history(session_id):
+    history = get_history(session_id)
+    return jsonify({'session_id': session_id, 'history': history})
+
+
+@app.route('/session/<session_id>/clear', methods=['POST'])
+def session_clear(session_id):
+    ok = clear_session(session_id)
+    return jsonify({'session_id': session_id, 'cleared': ok})
+
 
 @app.route('/ask', methods=['POST'])
 def ask():
-    data = request.get_json()
-    question = data.get('question', '')
+    data = request.get_json() or {}
+    question = data.get('question', '').strip()
+    session_id = data.get('session_id')
+
+    if not question:
+        return jsonify({'error': 'question is required'}), 400
+
     # Try FAQ first
     answer = get_faq_answer(question)
     if answer is not None:
+        if session_id:
+            add_turn(session_id, question, answer, 'faq')
         return jsonify({'answer': answer, 'source': 'faq'})
+
     # Fallback to AI model
     context = data.get('context', 'This is a general context for the AI model.')
-    ai_result = qa_pipeline({'question': question, 'context': context})
-    # Ensure ai_result is a dict and contains 'answer'
+    try:
+        qa = get_qa_pipeline()
+        ai_result = qa({'question': question, 'context': context})
+    except Exception as e:
+        return jsonify({'error': 'AI model error', 'details': str(e)}), 500
+
     if isinstance(ai_result, dict) and 'answer' in ai_result:
-        return jsonify({'answer': ai_result['answer'], 'source': 'ai'})
+        answer_text = ai_result['answer']
     else:
-        return jsonify({'answer': 'Sorry, I could not find an answer.', 'source': 'ai'})
+        answer_text = 'Sorry, I could not find an answer.'
+
+    if session_id:
+        add_turn(session_id, question, answer_text, 'ai')
+
+    return jsonify({'answer': answer_text, 'source': 'ai'})
+
 
 @app.route('/')
 def index():
     return 'AI Q&A Chatbot API is running.'
+
 
 if __name__ == '__main__':
     app.run(debug=True)
