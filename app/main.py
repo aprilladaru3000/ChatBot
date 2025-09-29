@@ -1,7 +1,23 @@
 from flask import Flask, request, jsonify
 from transformers import pipeline
 from .faq import get_faq_answer
-from .history import create_session, add_turn, get_history, clear_session
+from .history import create_session, add_turn, get_history, clear_session, add_feedback
+@app.route('/session/<session_id>/feedback', methods=['POST'])
+def session_feedback(session_id):
+    """
+    Submit feedback for a specific turn in the session history.
+    JSON body: {"turn_index": int, "feedback": str}
+    """
+    data = request.get_json() or {}
+    turn_index = data.get('turn_index')
+    feedback = data.get('feedback')
+    if turn_index is None or feedback is None:
+        return jsonify({'error': 'turn_index and feedback are required'}), 400
+    ok = add_feedback(session_id, int(turn_index), feedback)
+    if ok:
+        return jsonify({'session_id': session_id, 'turn_index': turn_index, 'feedback': feedback, 'status': 'success'})
+    else:
+        return jsonify({'error': 'Invalid session_id or turn_index'}), 400
 
 app = Flask(__name__)
 
